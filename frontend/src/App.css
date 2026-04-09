@@ -1,63 +1,189 @@
-body {
+:root {
+  --bg: #000000;
+  --panel: #0a0a0a;
+  --panel-2: #050505;
+  --border: rgba(0, 255, 255, 0.2);
+  --text: #00ffff;
+  --muted: rgba(0, 255, 255, 0.6);
+  --glow: rgba(0, 255, 255, 0.7);
+
+  --bubble-ai: rgba(0, 0, 0, 0.8);
+  --bubble-user: rgba(0, 255, 255, 0.15);
+
+  --shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+  --radius: 12px;
+
+  --font: 'Segoe UI', system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+}
+
+.appShell {
+  min-height: 100svh;
+  background: linear-gradient(to right, #000000), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect fill='%23000'/%3E%3C/svg%3E") no-repeat center/cover;
+  background-color: #000000;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font);
+}
+
+.appHeader {
+  height: 64px;
+  padding: 15px 50px;
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.7);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.appHeader__title {
+  font-size: 1.8rem;
+  font-weight: bold;
+  color: var(--text);
+  text-shadow: 0 0 10px var(--glow);
   margin: 0;
 }
 
-.app {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  background: #0f172a;
-  color: white;
+.appHeader__subtitle {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
 }
 
-.header {
-  padding: 15px;
-  background: #1e293b;
-  text-align: center;
-  font-weight: bold;
-}
-
-.chat {
+.appMain {
   flex: 1;
-  padding: 15px;
-  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  padding: 14px 14px 0;
+  overflow: hidden;
+}
+
+.appFooter {
+  padding: 10px 14px 14px;
+  border-top: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.chatWindow {
+  width: min(980px, 100%);
+  height: 100%;
+  overflow: auto;
+  padding: 0 6px 14px;
+  scroll-behavior: smooth;
+}
+
+.chatWindow__inner {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  padding: 12px 0 6px;
 }
 
-.msg {
-  max-width: 70%;
-  padding: 10px;
-  border-radius: 10px;
-  white-space: pre-line;
-}
-
-.msg.user {
-  align-self: flex-end;
-  background: #22c55e;
-  color: black;
-}
-
-.msg.ai {
-  align-self: flex-start;
-  background: #334155;
-}
-
-.inputBox {
+.row {
   display: flex;
-  padding: 10px;
-  background: #1e293b;
+  width: 100%;
 }
 
-.inputBox input {
-  flex: 1;
-  padding: 10px;
+.row--left {
+  justify-content: flex-start;
 }
 
-.inputBox button {
-  margin-left: 10px;
-  padding: 10px;
-  background: #22c55e;
-  border: none;
+.row--right {
+  justify-content: flex-end;
+}
+
+.bubble {
+  max-width: min(78%, 720px);
+  padding: 12px 14px;
+  border-radius: 8px;
+  box-shadow: 0 0 15px rgba(0, 255, 255, 0.2);
+  border: 2px solid rgba(0, 255, 255, 0.2);
+  backdrop-filter: blur(6px);
+}
+
+.bubble--ai {
+  background: rgba(0, 0, 0, 0.8);
+  color: #b8f6ff;
+}
+
+.bubble--user {
+  background: rgba(0, 255, 255, 0.1);
+  color: var(--text);
+}
+
+.bubble__text {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  line-height: 1.35;
+  font-size: 14.5px;
+}
+
+.inputBar {
+  width: min(980px, 100%);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.inputBar__input {
+  resize: none;
+  padding: 12px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  outline: none;
+  min-height: 44px;
+  max-height: 160px;
+  overflow: auto;
+  font-family: var(--font);
+  font-size: 14.5px;
+  line-height: 1.35;
+}
+
+.inputBar__input:focus {
+  border-color: rgba(0, 255, 255, 0.8);
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+}
+
+.inputBar__send {
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 255, 255, 0.4);
+  background: rgba(0, 255, 255, 0.15);
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  text-shadow: 0 0 5px rgba(0, 255, 255, 0.4);
+}
+
+.inputBar__send:hover:enabled {
+  background: rgba(0, 255, 255, 0.25);
+  border-color: rgba(0, 255, 255, 0.8);
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.4);
+}
+
+.inputBar__send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 520px) {
+  .appHeader {
+    height: 60px;
+  }
+
+  .bubble {
+    max-width: 86%;
+  }
+
+  .inputBar {
+    gap: 8px;
+  }
 }
