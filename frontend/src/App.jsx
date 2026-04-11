@@ -18,6 +18,10 @@ function tokenize(text) {
   return cleaned.split(' ').filter(Boolean)
 }
 
+function unique(items) {
+  return Array.from(new Set(items))
+}
+
 function mockRerank({ query, documents }) {
   // Future integration (NO real calls now):
   // POST https://openrouter.ai/api/v1/rerank
@@ -37,88 +41,151 @@ function mockRerank({ query, documents }) {
   return scored.sort((a, b) => b.score - a.score).slice(0, 3)
 }
 
-async function checkAllFieldsPresent(userText, apiKey) {
-  if (!apiKey || apiKey === 'your_api_key_here') {
-    return false
-  }
-  try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'meta-llama/llama-3.1-8b-instruct',
-        messages: [
-          {
-            role: 'user',
-            content: `Analyze this text for website project details. Check if it contains ALL 4 of these types of information (accept related terms and contextual meaning):
-1) BUSINESS IDENTIFICATION - business name, company name, organization name, clinic name, brand name, etc.
-2) CONTACT INFORMATION - phone number, email address, ways to reach, contact methods, etc.
-3) DESIGN/WEBSITE INFO - website type, design style, layout description, color theme, features, pages needed, visual requirements, etc.
-4) LOCATION/ADDRESS - physical address, office location, street address, city, service area, where business is located, etc.
+function extractProjectDetails(userText) {
+  const text = userText ?? ''
+  const lower = normalizeText(text)
 
-Respond with ONLY "YES" if the text contains all 4 types of information, otherwise respond "NO". Do not explain.
+  const emailRegex = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i
+  const phoneRegex =
+    /(\+?\d{1,3}[\s.-]?)?(\(?\d{2,4}\)?[\s.-]?)?\d{3,4}[\s.-]?\d{3,4}\b/
 
-Text: "${userText}"`
-          }
-        ],
-        max_tokens: 20,
-      }),
-    })
-    const data = await response.json()
-    const result = data.choices[0].message.content.trim().toUpperCase()
-    return result.includes('YES')
-  } catch (error) {
-    console.error('Field check API error:', error)
-    return false
+  const addressRegex =
+    /\b(\d{1,6}\s+[a-z0-9.\-'\s]+?\s+(street|st|road|rd|avenue|ave|boulevard|blvd|lane|ln|drive|dr|way|court|ct)\b)|\b(po box|p\.o\. box)\b|\b(zip|postal code|postcode)\b/i
+
+  const websiteTypeKeywords = [
+    'landing page',
+    'ecommerce',
+    'e-commerce',
+    'shop',
+    'store',
+    'portfolio',
+    'restaurant',
+    'menu',
+    'booking',
+    'appointment',
+    'saas',
+    'marketing site',
+    'website',
+    'web site',
+    'webpage',
+    'web page',
+  ]
+
+  const designKeywords = [
+    'modern',
+    'minimal',
+    'luxury',
+    'bold',
+    'clean',
+    'dark',
+    'light',
+    'color',
+    'theme',
+    'layout',
+    'sections',
+    'pages',
+    'features',
+    'logo',
+    'brand',
+  ]
+
+  const hasEmail = emailRegex.test(text)
+  const hasPhone = phoneRegex.test(text)
+  const hasContact = hasEmail || hasPhone || lower.includes('contact') || lower.includes('call') || lower.includes('email')
+
+  const hasAddress =
+    addressRegex.test(text) ||
+    lower.includes('address') ||
+    lower.includes('located in') ||
+    lower.includes('location') ||
+    lower.includes('city') ||
+    lower.includes('near ') ||
+    lower.includes('service area')
+
+  const hasWebsiteType = websiteTypeKeywords.some((k) => lower.includes(k))
+  const hasDesignHints = designKeywords.some((k) => lower.includes(k))
+  const hasWebDesignInfo = hasWebsiteType || hasDesignHints
+
+  const businessSignals = [
+    'business name',
+    'company',
+    'brand',
+    'we are',
+    'i am',
+    'clinic',
+    'restaurant',
+    'studio',
+    'agency',
+    'shop',
+    'store',
+    'salon',
+  ]
+  const hasBusinessSignal = businessSignals.some((k) => lower.includes(k))
+
+  // Heuristic: if user includes a likely name phrase near "business name is"
+  const explicitBusinessName =
+    /\b(business name|company name|brand name)\s*(is|:)\s*([^\n\r,.;]{2,60})/i.exec(text)?.[3]?.trim() ?? ''
+
+  const hasBusinessName = Boolean(explicitBusinessName) || hasBusinessSignal
+
+  const missing = []
+  if (!hasBusinessName) missing.push('Business Name')
+  if (!hasContact) missing.push('Contact Details')
+  if (!hasWebDesignInfo) missing.push('Web Design Info')
+  if (!hasAddress) missing.push('Address')
+
+  return {
+    hasBusinessName,
+    hasContact,
+    hasWebDesignInfo,
+    hasAddress,
+    allFieldsPresent: missing.length === 0,
+    missing,
+    extracted: {
+      businessName: explicitBusinessName || null,
+      email: hasEmail ? text.match(emailRegex)?.[0] ?? null : null,
+    },
   }
 }
 
-async function getMissingFields(userText, apiKey) {
-  if (!apiKey || apiKey === 'your_api_key_here') {
-    return ['Business Name', 'Contact Details', 'Web Design Info', 'Address']
-  }
-  try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'meta-llama/llama-3.1-8b-instruct',
-        messages: [
-          {
-            role: 'user',
-            content: `Analyze this text for website project details. Identify which of these 4 information types are MISSING (accept related terms and contextual meaning):
-1) BUSINESS IDENTIFICATION - business name, company name, organization name, clinic name, brand name, etc.
-2) CONTACT INFORMATION - phone number, email address, ways to reach, contact methods, etc.
-3) DESIGN/WEBSITE INFO - website type, design style, layout description, color theme, features, pages needed, visual requirements, etc.
-4) LOCATION/ADDRESS - physical address, office location, street address, city, service area, where business is located, etc.
+function isLikelyQuestion(text) {
+  const lower = normalizeText(text)
+  if (lower.endsWith('?')) return true
+  if (/(^|\s)(what|how|why|when|where|which|who|can you|do you|should i)\b/.test(lower)) return true
+  if (lower.startsWith('help')) return true
+  return false
+}
 
-Respond with a list of missing categories only. Use exact format: "Business Name", "Contact Details", "Web Design Info", "Address". If all are present, respond with "NONE". Do not explain.
+function isWebsiteGenerationRequest(text) {
+  const lower = normalizeText(text)
+  if (!lower) return false
 
-Text: "${userText}"`
-          }
-        ],
-        max_tokens: 50,
-      }),
-    })
-    const data = await response.json()
-    const result = data.choices[0].message.content.trim()
-    if (result.includes('NONE')) return []
-    const missing = []
-    if (result.includes('Business')) missing.push('Business Name')
-    if (result.includes('Contact') || result.includes('contact')) missing.push('Contact Details')
-    if (result.includes('Design') || result.includes('design') || result.includes('website')) missing.push('Web Design Info')
-    if (result.includes('Address') || result.includes('address') || result.includes('Location') || result.includes('location')) missing.push('Address')
-    return missing
-  } catch (error) {
-    console.error('Field extraction API error:', error)
-    return ['Business Name', 'Contact Details', 'Web Design Info', 'Address']
-  }
+  const intentKeywords = [
+    'website',
+    'web site',
+    'webpage',
+    'web page',
+    'landing page',
+    'portfolio',
+    'ecommerce',
+    'e-commerce',
+    'online store',
+    'store',
+    'shop',
+    'booking',
+    'appointment',
+    'restaurant menu',
+    'business site',
+  ]
+
+  const actionKeywords = ['create', 'build', 'generate', 'make', 'design', 'develop', 'need', 'want']
+
+  const hasIntent = intentKeywords.some((k) => lower.includes(k))
+  const hasAction = actionKeywords.some((k) => lower.includes(k))
+
+  // Treat as a website request if they mention a website directly,
+  // or if they use strong action language + a known website type.
+  return hasIntent || (hasAction && intentKeywords.some((k) => lower.includes(k)))
 }
 
 function MessageBubble({ role, content, type = 'default' }) {
@@ -263,6 +330,18 @@ export default function App() {
     await sleep(80)
   }
 
+  async function pushAiBoxes(boxes) {
+    for (const box of boxes) {
+      await pushMessage({
+        id: nowId(),
+        role: 'ai',
+        content: box.content,
+        type: box.type ?? 'default',
+        createdAt: Date.now(),
+      })
+    }
+  }
+
   async function handleSend(text) {
     const trimmed = text.trim()
     if (!trimmed) return
@@ -279,47 +358,65 @@ export default function App() {
       }
       await pushMessage(newUserMessage)
 
-      const apiKey = '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'
-      let aiResponse = 'Sorry, API key not configured or API error occurred.'
+      let aiResponse = ''
+      let msgType = 'default'
 
-      if (apiKey && apiKey !== 'your_api_key_here') {
-        // First check if all 4 fields are present
-        const allFieldsPresent = await checkAllFieldsPresent(trimmed, apiKey)
-        
-        if (allFieldsPresent) {
-          aiResponse = 'Your website is being created. It will take 5-10 minutes. Status: In Progress. Please wait.'
+      const isWebsiteRequest = isWebsiteGenerationRequest(trimmed)
+
+      if (!isWebsiteRequest || isLikelyQuestion(trimmed)) {
+        await pushAiBoxes([
+          { type: 'error', content: '🚫 Not a Website Request' },
+          {
+            type: 'default',
+            content: 'I am Champtrix Launch Pad — specialized in WEBSITE GENERATION only.',
+          },
+          {
+            type: 'default',
+            content: 'I cannot process:\n- General questions\n- Chat\n- Coding unrelated to websites',
+          },
+          {
+            type: 'success',
+            content: '✅ Try something like:\n"Create a portfolio website for a photographer in Mumbai"',
+          },
+          {
+            type: 'status',
+            content:
+              'Include:\n• Business Name\n• Contact Details\n• Address\n• Website Type',
+          },
+        ])
+        return
+      }
+
+      {
+        const details = extractProjectDetails(trimmed)
+        if (details.allFieldsPresent) {
+          aiResponse =
+            'Your website is being created. It will take 5-10 minutes. Status: In Progress. Please wait.'
+          msgType = 'success'
         } else {
-          // Get missing fields
-          const missingFields = await getMissingFields(trimmed, apiKey)
-          if (missingFields.length > 0) {
-            aiResponse = `Missing: ${missingFields.join(', ')}`
-          } else {
-            aiResponse = 'Please provide all required information: Business Name, Contact Details, Web Design Info, and Address.'
-          }
+          const missing = unique(details.missing)
+          aiResponse = `Missing: ${missing.join(', ')}`
+          msgType = 'missing'
         }
       }
 
-      let msgType = 'default'
-      let displayContent = aiResponse
-      
       if (aiResponse.includes('Your website is being created')) {
-        msgType = 'success'
-        displayContent = `✅ Website Creation Initiated\n\n${aiResponse}\n\n⏳ Estimated Time: 5-10 minutes\n📊 Status: Processing your request`
-      } else if (aiResponse.includes('Missing:')) {
-        msgType = 'missing'
-        displayContent = `⚠️ Incomplete Information\n\n${aiResponse}\n\nPlease provide the missing details to proceed.`
-      } else if (aiResponse.includes('Sorry') || aiResponse.includes('error')) {
-        msgType = 'error'
-        displayContent = `❌ Error\n\n${aiResponse}`
+        await pushAiBoxes([
+          { type: 'success', content: 'Website Creation Initiated' },
+          { type: 'status', content: 'Status: In Progress' },
+          { type: 'status', content: 'Estimated time: 5–10 minutes' },
+          { type: 'default', content: aiResponse },
+        ])
+      } else if (aiResponse.startsWith('Missing:')) {
+        const parts = aiResponse.replace(/^Missing:\s*/i, '').split(',').map((s) => s.trim()).filter(Boolean)
+        await pushAiBoxes([
+          { type: 'missing', content: 'Incomplete Information' },
+          ...parts.map((p) => ({ type: 'missing', content: p })),
+          { type: 'default', content: 'Please send the missing details to proceed.' },
+        ])
+      } else {
+        await pushAiBoxes([{ type: msgType, content: aiResponse }])
       }
-
-      await pushMessage({
-        id: nowId(),
-        role: 'ai',
-        content: displayContent,
-        type: msgType,
-        createdAt: Date.now(),
-      })
     } finally {
       isRespondingRef.current = false
     }
@@ -328,7 +425,7 @@ export default function App() {
   return (
     <div className="appShell">
       <header className="appHeader">
-        <div className="appHeader__subtitle">Champtrix Launch Pad</div>
+        <div className="appHeader__subtitle"><h1>Champtrix Launch Pad</h1></div>
       </header>
 
       <main className="appMain" aria-label="Chat">
